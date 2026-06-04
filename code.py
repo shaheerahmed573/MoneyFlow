@@ -4,46 +4,73 @@ import plotly.graph_objects as go
 import datetime
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Student Budget App", page_icon="💰", layout="wide")
+st.set_page_config(page_title="MoneyFlow", page_icon="💰", layout="wide")
 
 # ====================================================
-# USER AUTHENTICATION (LOGIN SCREEN)
+# USER AUTHENTICATION (LOGIN & SIGN UP)
 # ====================================================
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
-USER_CREDENTIALS = {
-    "shaheer": "password123",
-    "amna": "student2026"
-}
+# Temporary database to hold users while the app is running
+if 'user_database' not in st.session_state:
+    st.session_state.user_database = {
+        "shaheer": {"name": "Shaheer", "password": "password123"},
+        "amna": {"name": "Amna", "password": "student2026"}
+    }
 
 if not st.session_state.logged_in:
     st.title("Welcome to MoneyFlow 🔒")
-    st.write("Please log in to access your financial dashboard.")
+    st.write("Please log in or create an account to access your financial dashboard.")
+    
+    tab1, tab2 = st.tabs(["Log In", "Sign Up"])
+    
+    # --- LOG IN TAB ---
+    with tab1:
+        with st.form("login_form"):
+            login_username = st.text_input("Username").lower().strip()
+            login_password = st.text_input("Password", type="password")
+            submit_login = st.form_submit_button("Log In", type="primary")
 
-    with st.form("login_form"):
-        username = st.text_input("Username").lower()
-        password = st.text_input("Password", type="password")
-        submit_button = st.form_submit_button("Log In")
+            if submit_login:
+                db = st.session_state.user_database
+                if login_username in db and db[login_username]["password"] == login_password:
+                    st.session_state.logged_in = True
+                    st.session_state.current_user = login_username
+                    st.session_state.current_name = db[login_username]["name"]
+                    st.rerun()
+                else:
+                    st.error("⚠️ Incorrect username or password.")
+                    
+    # --- SIGN UP TAB ---
+    with tab2:
+        with st.form("signup_form"):
+            new_name = st.text_input("Full Name (e.g., John Doe)")
+            new_username = st.text_input("Choose a Username").lower().strip()
+            new_password = st.text_input("Choose a Password", type="password")
+            submit_signup = st.form_submit_button("Create Account", type="primary")
+            
+            if submit_signup:
+                if new_username in st.session_state.user_database:
+                    st.error("⚠️ That username is already taken. Please choose another.")
+                elif new_username == "" or new_password == "" or new_name == "":
+                    st.warning("⚠️ Please fill out all fields.")
+                else:
+                    st.session_state.user_database[new_username] = {
+                        "name": new_name, 
+                        "password": new_password
+                    }
+                    st.success(f"✅ Account created for {new_name}! You can now Log In on the other tab.")
 
-        if submit_button:
-            if username in USER_CREDENTIALS and USER_CREDENTIALS[username] == password:
-                st.session_state.logged_in = True
-                st.session_state.current_user = username
-                st.rerun()
-            else:
-                st.error("⚠️ Incorrect username or password.")
-
-    # Stops the rest of the app from loading if not logged in
+    # MAGIC COMMAND: Stops the rest of the app from running until they are logged in.
     st.stop()
 
 # ====================================================
-# INITIAL SETUP & STATE MANAGEMENT
+# MAIN APP HEADER & LOGOUT
 # ====================================================
-# Custom welcome message and Logout button
 col1, col2 = st.columns([8, 1])
 with col1:
-    st.write(f"### Welcome back, {st.session_state.current_user.title()}! 👋")
+    st.write(f"### Welcome back, {st.session_state.current_name}! 👋")
 with col2:
     if st.button("Log Out"):
         st.session_state.logged_in = False
@@ -51,6 +78,9 @@ with col2:
 
 st.markdown("---")
 
+# ====================================================
+# INITIAL SETUP & STATE MANAGEMENT
+# ====================================================
 if 'expense_df' not in st.session_state:
     st.session_state.expense_df = pd.DataFrame(columns=['Item Name', 'Price (PKR)', 'Category', 'Type'])
 
@@ -97,9 +127,7 @@ with st.form("log_expense_form", clear_on_submit=True):
         category_dropdown = st.selectbox("Category:", st.session_state.available_categories)
         type_toggle = st.radio("Type:", ['Need', 'Want'], horizontal=True)
         
-    submitted = st.form_submit_button("Log Expense")
-    
-    if submitted:
+    if st.form_submit_button("Log Expense"):
         if item_name.strip() != "" and price > 0:
             new_row = pd.DataFrame([{
                 'Item Name': item_name,
@@ -112,10 +140,9 @@ with st.form("log_expense_form", clear_on_submit=True):
 
 with st.expander("Add Custom Category"):
     new_cat = st.text_input("New Category Name:")
-    if st.button("Add Category"):
-        if new_cat and new_cat not in st.session_state.available_categories:
-            st.session_state.available_categories.append(new_cat)
-            st.rerun()
+    if st.button("Add Category") and new_cat and new_cat not in st.session_state.available_categories:
+        st.session_state.available_categories.append(new_cat)
+        st.rerun()
 
 st.markdown("---")
 st.subheader("Dynamic Entry Table")
@@ -157,7 +184,6 @@ with chart_col1:
     colors_behavior = ['#636EFA', '#FFA15A', '#00CC96']
     
     alert_text = "✅ On track (50/30/20 Rule)"
-    
     if total_salary > 0 and wants_total > (total_salary * 0.30):
         colors_behavior[1] = '#FF3333'
         alert_text = "⚠️ ALERT: Wants exceed 30% of Salary!"
@@ -190,8 +216,7 @@ with st.form("add_need_form", clear_on_submit=True):
     with col2:
         need_cost = st.number_input("Cost (PKR):", min_value=0.0, step=500.0)
         
-    submitted_need = st.form_submit_button("Lock Need")
-    if submitted_need and need_name.strip() != "" and need_cost > 0:
+    if st.form_submit_button("Lock Need") and need_name.strip() != "" and need_cost > 0:
         new_need = pd.DataFrame([{'Need Name': need_name, 'Cost (PKR)': need_cost}])
         st.session_state.recurring_needs_df = pd.concat([st.session_state.recurring_needs_df, new_need], ignore_index=True)
         st.rerun()
@@ -207,7 +232,6 @@ if not st.session_state.recurring_needs_df.empty:
     st.dataframe(st.session_state.recurring_needs_df, use_container_width=True)
 
 st.markdown("---")
-
 st.subheader("2. The Dream Jar & Luxury Wishlist")
 with st.form("add_goal_form", clear_on_submit=True):
     col1, col2, col3 = st.columns([2, 1, 1.5])
@@ -218,8 +242,7 @@ with st.form("add_goal_form", clear_on_submit=True):
     with col3:
         goal_type = st.selectbox("Type:", ['Dream Jar (Savings)', 'Luxury Wishlist (Want)'])
         
-    submitted_goal = st.form_submit_button("Add Goal")
-    if submitted_goal and goal_name.strip() != "" and goal_target > 0:
+    if st.form_submit_button("Add Goal") and goal_name.strip() != "" and goal_target > 0:
         new_goal = pd.DataFrame([{'Goal Name': goal_name, 'Target (PKR)': goal_target, 'Saved (PKR)': 0.0, 'Type': goal_type}])
         st.session_state.goals_df = pd.concat([st.session_state.goals_df, new_goal], ignore_index=True)
         st.rerun()
