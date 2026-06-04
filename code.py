@@ -62,17 +62,44 @@ if not st.session_state.logged_in:
                     }
                     st.success(f"✅ Account created for {new_name}! You can now Log In on the other tab.")
 
-    # MAGIC COMMAND: Stops the rest of the app from running until they are logged in.
-    st.stop()
+    st.stop() # Stops the dashboard from showing until logged in
 
 # ====================================================
-# MAIN APP HEADER & LOGOUT
+# MAIN APP HEADER & LOGOUT / ROLLOVER
 # ====================================================
-col1, col2 = st.columns([8, 1])
+col1, col2, col3 = st.columns([6, 2, 3])
 with col1:
     st.write(f"### Welcome back, {st.session_state.current_name}! 👋")
+    
 with col2:
-    if st.button("Log Out"):
+    if st.button("Normal Log Out", use_container_width=True):
+        st.session_state.logged_in = False
+        st.rerun()
+        
+with col3:
+    # THE NEW ROLLOVER FEATURE
+    if st.button("End Month & Save Leftovers", type="primary", use_container_width=True):
+        # 1. Calculate exactly what is left
+        current_salary = st.session_state.get('salary_input', 0.0)
+        current_expenses = st.session_state.expense_df['Price (PKR)'].sum() if not st.session_state.expense_df.empty else 0
+        locked_needs = st.session_state.recurring_needs_df['Cost (PKR)'].sum() if not st.session_state.recurring_needs_df.empty else 0
+        allocated_goals = st.session_state.goals_df['Saved (PKR)'].sum() if not st.session_state.goals_df.empty else 0
+        
+        unallocated = current_salary - locked_needs - current_expenses - allocated_goals
+        
+        # 2. Sweep unallocated money into a Rollover Savings goal
+        if unallocated > 0:
+            if 'Rollover Savings' not in st.session_state.goals_df['Goal Name'].values:
+                new_goal = pd.DataFrame([{'Goal Name': 'Rollover Savings', 'Target (PKR)': 0.0, 'Saved (PKR)': unallocated, 'Type': 'Dream Jar (Savings)'}])
+                st.session_state.goals_df = pd.concat([st.session_state.goals_df, new_goal], ignore_index=True)
+            else:
+                idx = st.session_state.goals_df.index[st.session_state.goals_df['Goal Name'] == 'Rollover Savings'].tolist()[0]
+                st.session_state.goals_df.at[idx, 'Saved (PKR)'] += unallocated
+                
+        # 3. Wipe the daily expenses clean for the new month
+        st.session_state.expense_df = pd.DataFrame(columns=['Item Name', 'Price (PKR)', 'Category', 'Type'])
+        
+        # 4. Log out
         st.session_state.logged_in = False
         st.rerun()
 
@@ -103,7 +130,8 @@ st.title("Student Spending App Prototype 💰")
 # ====================================================
 st.header("Part 1: Income & Expense Logging")
 
-total_salary = st.number_input('Enter Monthly Salary / Pocket Money (PKR):', min_value=0.0, value=0.0, step=1000.0)
+# CRITICAL UPDATE: The key="salary_input" here lets the rollover button read the salary!
+total_salary = st.number_input('Enter Monthly Salary / Pocket Money (PKR):', min_value=0.0, value=0.0, step=1000.0, key="salary_input")
 total_expenses = st.session_state.expense_df['Price (PKR)'].sum()
 potential_savings = total_salary - total_expenses
 
